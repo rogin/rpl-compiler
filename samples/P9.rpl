@@ -1,0 +1,26 @@
+/*------------------------------------------------------------*/
+// Richard Ogin
+// Program #9
+// P9.rpl
+/*------------------------------------------------------------*/
+PROGRAM
+   int x;
+   int y;
+
+   x = 101;
+   y = 0;
+   
+   assert ( (x >= 0) AND (y != 1) );
+   
+   assert ( true );
+   
+   assert ( NOT false );
+
+   y = x + 1;
+
+   assert ( x = y - 1 );
+   
+   //this assertion should fail as y is x + 1
+   assert ( y < x );
+
+END

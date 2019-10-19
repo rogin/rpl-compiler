@@ -1,0 +1,76 @@
+/*------------------------------------------------------------*/
+// Richard Ogin
+// Program #8
+// P8.rpl
+/*------------------------------------------------------------*/
+
+PROGRAM
+   const int initialX = 1;
+   const int initialY = 3;
+   
+   int i;
+   int n;
+   int x;
+   int y;
+
+   INPUT "n? " n;
+
+   PRINT "FOR-loop (1)",ENDL;
+   x = initialX;
+   y = initialY;
+   for i from 1 to n by 1 {
+      PRINT i, ": ";
+      if   ( x < y ) {
+         PRINT x, " < ", y, ENDL;
+      } elif ( x = y ) {
+         PRINT x, " = ", y, ENDL;
+      } elif ( x > y ) {
+         PRINT x, " > ", y, ENDL;
+      }
+
+      x = x + 1;
+      y = y - 1;
+   }
+
+   PRINT "FOR-loop (2)",ENDL;
+   x = initialX;
+   y = initialY;
+   for i from 1 to n {
+      PRINT i,": ";
+      if   ( x < y ) {
+         PRINT x," < ",y,ENDL;
+      } elif ( x = y ) {
+         PRINT x," = ",y,ENDL;
+      } elif ( x > y ) {
+         PRINT x," > ",y,ENDL;
+      }
+      //x := x+2.
+      //y := y-2.
+      x = x + 2;
+      y = y - 2;
+   }
+
+   PRINT "FOR-loop (3)",ENDL;
+   x = initialX;
+   y = initialY;
+   for i from n to 1 by -1 {
+      PRINT i,": ";
+      if   ( x < y ) {
+         PRINT x," < ",y,ENDL;
+      } elif ( x = y ) {
+         PRINT x," = ",y,ENDL;
+      } elif ( x > y ) {
+         PRINT x," > ",y,ENDL;
+      }
+      //x := x+3.
+      //y := y-3.
+      x = x + 3;
+      y = y - 3;
+   }
+
+   PRINT "FOR-loop (4)",ENDL;
+   for i from 1 to n by 1-1 {            ; run-time error #2 (e3 = 0)
+      PRINT "UNREACHABLE",ENDL;
+   }
+
+END
