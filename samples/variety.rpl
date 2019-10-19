@@ -1,0 +1,14 @@
+PROGRAM
+   boolean b1;
+   
+   int sum;
+   
+   boolean b2;
+   int x1;
+   int x2;
+   int x3;
+   
+   x1 = 2;
+   
+   INPUT "int? " x2;
+END

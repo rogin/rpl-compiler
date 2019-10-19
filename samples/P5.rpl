@@ -1,0 +1,45 @@
+/*---------------------------------------------------------*/
+// Richard Ogin
+// Problem #5
+// P5.rpl
+/*---------------------------------------------------------*/
+
+PROGRAM
+   const int c1 = 1;
+   const boolean c2 = true;
+   const int c3 = 3;
+   const boolean c4 = false;
+   int x1;
+   int x2;
+   int x3;
+   int sum;
+   boolean b1;
+   boolean b2;
+   
+   PRINT "c1 = ",c1,ENDL;
+   PRINT "c2 = ",c2,ENDL;
+   PRINT "c3 = ",c3,ENDL;
+   PRINT "c4 = ",c4,ENDL;
+
+/* Generates a static semantic (context-dependent) error
+   c1 = 2;
+*/
+   x1 = 0;
+   INPUT "x1? " x1;
+   INPUT x2;
+   PRINT "c1 = ", c1, ENDL;
+   sum = x1+x2+c1;
+   PRINT "x1+x2+c1 = ",sum,ENDL;
+
+// test new increment and decrement operators   
+   PRINT "x1 = ", x1, ", ++x1 = ", ++x1, ENDL;
+   PRINT "x1 = ", x1, ", --x1 = ", --x1, ENDL;
+
+   INPUT "b1? " b1;
+   b2 = NOT(b1) OR (c2 XOR c4);
+   PRINT "b1 = ",b1,", b2 = ",b2,ENDL;
+   
+   INPUT "b1? " b1;
+   b2 = NOT(b1) OR (c2 XOR c4);
+   PRINT "b1 = ",b1,", b2 = ",b2,ENDL;
+END
