@@ -1,6 +1,6 @@
 //-----------------------------------------------------------
 // Richard Ogin
-// RPL3 Compiler
+// RPL4 Compiler
 // 
 // RPLCompiler.cpp
 //-----------------------------------------------------------
@@ -50,12 +50,19 @@ typedef enum
    BOOL,
    CONST,
    INPUT,
+   IF,
+   ELIF,
+   ELSE,
+   DO,
+   WHILE,
 // punctuation
    COMMA,
    SEMICOLON,
    OPARENTHESIS,
    CPARENTHESIS,
    EQUAL,
+   OBRACKET,
+   CBRACKET,
 // operators
    LT,
    LTEQ,
@@ -108,10 +115,17 @@ const TOKENTABLERECORD TOKENTABLE[] =
    { BOOL        ,"boolean"     ,true  },
    { CONST       ,"const"       ,true  },
    { INPUT       ,"INPUT"       ,true  },
+   { IF          ,"if"          ,true  },
+   { ELIF        ,"elif"        ,true  },
+   { ELSE        ,"else"        ,true  },
+   { DO          ,"do"          ,true  },
+   { WHILE       ,"while"       ,true  },
    { COMMA       ,"COMMA"       ,false },
    { SEMICOLON   ,"SEMICOLON"   ,false },
    { OPARENTHESIS,"OPARENTHESIS",false },
    { CPARENTHESIS,"CPARENTHESIS",false },
+   { OBRACKET    ,"OBRACKET"    ,false },
+   { CBRACKET    ,"CBRACKET"    ,false },
    { LT          ,"LT"          ,false },
    { LTEQ        ,"LTEQ"        ,false },
    { EQ          ,"EQ"          ,false },
@@ -655,6 +669,8 @@ void ParseStatement(TOKEN tokens[])
    void ParsePRINTStatement(TOKEN tokens[]);
    void ParseINPUTStatement(TOKEN tokens[]);
    void ParseAssignmentStatement(TOKEN tokens[]);
+   void ParseIFStatement(TOKEN tokens[]);
+   void ParseDOWHILEStatement(TOKEN tokens[]);
    void GetNextToken(TOKEN tokens[]);
 
    EnterModule("Statement");
@@ -670,6 +686,12 @@ void ParseStatement(TOKEN tokens[])
       case IDENTIFIER:
          ParseAssignmentStatement(tokens);
          break;
+      case IF:
+      	 ParseIFStatement(tokens);
+      	 break;
+	  case DO:
+      	 ParseDOWHILEStatement(tokens);
+      	 break;
       default:
          ProcessCompilerError(tokens[0].sourceLineNumber,tokens[0].sourceLineIndex,
                               "Expecting beginning-of-statement");
@@ -788,7 +810,215 @@ void ParseAssignmentStatement(TOKEN tokens[])
 
    ExitModule("AssignmentStatement");
 }
+//-----------------------------------------------------------
+void ParseIFStatement(TOKEN tokens[])
+//-----------------------------------------------------------
+{
+   void ParseExpression(TOKEN tokens[],DATATYPE &datatype);
+   void ParseStatement(TOKEN tokens[]);
+   void GetNextToken(TOKEN tokens[]);
 
+   char line[SOURCELINELENGTH+1];
+   char Ilabel[SOURCELINELENGTH+1],Elabel[SOURCELINELENGTH+1];
+   DATATYPE datatype;
+
+   EnterModule("IFStatement");
+
+   sprintf(line,"; **** IF statement (%4d)",tokens[0].sourceLineNumber);
+   code.EmitUnformattedLine(line);
+
+   GetNextToken(tokens);
+
+   if ( tokens[0].type != OPARENTHESIS )
+      ProcessCompilerError(tokens[0].sourceLineNumber,tokens[0].sourceLineIndex,"Expecting '('");
+   GetNextToken(tokens);
+   ParseExpression(tokens,datatype);
+   if ( tokens[0].type != CPARENTHESIS )
+      ProcessCompilerError(tokens[0].sourceLineNumber,tokens[0].sourceLineIndex,"Expecting ')'");
+   GetNextToken(tokens);
+   if ( tokens[0].type != OBRACKET )
+      ProcessCompilerError(tokens[0].sourceLineNumber,tokens[0].sourceLineIndex,"Expecting '{'");
+   GetNextToken(tokens);
+
+   if ( datatype != BOOLEANTYPE )
+      ProcessCompilerError(tokens[0].sourceLineNumber,tokens[0].sourceLineIndex,"Expecting boolean expression");
+
+// CODEGENERATION
+/* 
+   Plan for the generalized IF statement with n ELIFs and 1 ELSE (*Note* n
+      can be 0 and the ELSE may be missing and the plan still "works.")
+
+   ...expression...           ; boolean expression on top-of-stack
+      SETT
+      DISCARD   #0D1
+      JMPNT     I???1
+   ...statements...
+      JMP       E????
+I???1 EQU       *             ; 1st ELIF clause
+   ...expression...
+      SETT
+      DISCARD   #0D1
+      JMPNT     I???2
+   ...statements...
+      JMP       E????
+      .
+      .
+I???n EQU       *             ; nth ELIF clause
+   ...expression...
+      SETT
+      DISCARD   #0D1
+      JMPNT     I????
+   ...statements...
+      JMP       E????
+I???? EQU       *             ; ELSE clause
+   ...statements...
+E???? EQU       *
+*/
+   sprintf(Elabel,"E%04d",code.LabelSuffix());
+   code.EmitFormattedLine("","SETT");
+   code.EmitFormattedLine("","DISCARD","#0D1");
+   sprintf(Ilabel,"I%04d",code.LabelSuffix());
+   code.EmitFormattedLine("","JMPNT",Ilabel);
+// ENDCODEGENERATION
+
+   while ( (tokens[0].type != CBRACKET) )
+      ParseStatement(tokens);
+   
+   GetNextToken(tokens);
+
+// CODEGENERATION
+   code.EmitFormattedLine("","JMP",Elabel);
+   code.EmitFormattedLine(Ilabel,"EQU","*");
+// ENDCODEGENERATION
+
+   while ( tokens[0].type == ELIF )
+   {
+      GetNextToken(tokens);
+      if ( tokens[0].type != OPARENTHESIS )
+         ProcessCompilerError(tokens[0].sourceLineNumber,tokens[0].sourceLineIndex,"Expecting '('");
+      GetNextToken(tokens);
+      ParseExpression(tokens,datatype);
+      if ( tokens[0].type != CPARENTHESIS )
+         ProcessCompilerError(tokens[0].sourceLineNumber,tokens[0].sourceLineIndex,"Expecting ')'");
+      GetNextToken(tokens);
+      if ( tokens[0].type != OBRACKET )
+         ProcessCompilerError(tokens[0].sourceLineNumber,tokens[0].sourceLineIndex,"Expecting '{'");
+      GetNextToken(tokens);
+
+// CODEGENERATION
+      code.EmitFormattedLine("","SETT");
+      code.EmitFormattedLine("","DISCARD","#0D1");
+      sprintf(Ilabel,"I%04d",code.LabelSuffix());
+      code.EmitFormattedLine("","JMPNT",Ilabel);
+// ENDCODEGENERATION
+
+      while ( (tokens[0].type != CBRACKET) )
+         ParseStatement(tokens);
+      GetNextToken(tokens);
+
+// CODEGENERATION
+      code.EmitFormattedLine("","JMP",Elabel);
+      code.EmitFormattedLine(Ilabel,"EQU","*");
+// ENDCODEGENERATION
+
+   }
+   if ( tokens[0].type == ELSE )
+   {
+      GetNextToken(tokens);
+      
+      if ( tokens[0].type != OBRACKET )
+         ProcessCompilerError(tokens[0].sourceLineNumber,tokens[0].sourceLineIndex,"Expecting '{'");
+      GetNextToken(tokens);
+      
+      while ( tokens[0].type != CBRACKET )
+         ParseStatement(tokens);
+   }
+
+   GetNextToken(tokens);
+
+// CODEGENERATION
+      code.EmitFormattedLine(Elabel,"EQU","*");
+// ENDCODEGENERATION
+
+   ExitModule("IFStatement");
+}
+//-----------------------------------------------------------
+void ParseDOWHILEStatement(TOKEN tokens[])
+//-----------------------------------------------------------
+{
+   void ParseExpression(TOKEN tokens[],DATATYPE &datatype);
+   void ParseStatement(TOKEN tokens[]);
+   void GetNextToken(TOKEN tokens[]);
+
+   char line[SOURCELINELENGTH+1];
+   char Dlabel[SOURCELINELENGTH+1],Elabel[SOURCELINELENGTH+1];
+   DATATYPE datatype;
+
+   EnterModule("DOWHILEStatement");
+
+   sprintf(line,"; **** DO-WHILE statement (%4d)",tokens[0].sourceLineNumber);
+   code.EmitUnformattedLine(line);
+
+   GetNextToken(tokens);
+
+// CODEGENERATION
+/*
+D???? EQU       *
+   ...statements...
+   ...expression...
+      SETT
+      DISCARD   #0D1
+      JMPNT     E????
+   ...statements...
+      JMP       D????
+E???? EQU       *
+*/
+
+   sprintf(Dlabel,"D%04d",code.LabelSuffix());
+   sprintf(Elabel,"E%04d",code.LabelSuffix());
+   code.EmitFormattedLine(Dlabel,"EQU","*");
+// ENDCODEGENERATION
+
+   if ( tokens[0].type != OBRACKET )
+      ProcessCompilerError(tokens[0].sourceLineNumber,tokens[0].sourceLineIndex,"Expecting '{'");
+   GetNextToken(tokens);
+   
+   while ( tokens[0].type != CBRACKET )
+      ParseStatement(tokens);
+   GetNextToken(tokens);
+   
+   if ( tokens[0].type != WHILE )
+      ProcessCompilerError(tokens[0].sourceLineNumber,tokens[0].sourceLineIndex,"Expecting 'while'");
+   GetNextToken(tokens);
+   if ( tokens[0].type != OPARENTHESIS )
+      ProcessCompilerError(tokens[0].sourceLineNumber,tokens[0].sourceLineIndex,"Expecting '('");
+   GetNextToken(tokens);
+   ParseExpression(tokens,datatype);
+   if ( tokens[0].type != CPARENTHESIS )
+      ProcessCompilerError(tokens[0].sourceLineNumber,tokens[0].sourceLineIndex,"Expecting ')'");
+   GetNextToken(tokens);
+
+   if ( datatype != BOOLEANTYPE )
+      ProcessCompilerError(tokens[0].sourceLineNumber,tokens[0].sourceLineIndex,"Expecting boolean expression");
+
+// CODEGENERATION
+   code.EmitFormattedLine("","SETT");
+   code.EmitFormattedLine("","DISCARD","#0D1");
+   code.EmitFormattedLine("","JMPNT",Elabel);
+// ENDCODEGENERATION
+
+   if ( tokens[0].type != SEMICOLON )
+      ProcessCompilerError(tokens[0].sourceLineNumber,tokens[0].sourceLineIndex,"Expecting ';;;;'");
+   
+   GetNextToken(tokens);
+
+// CODEGENERATION
+   code.EmitFormattedLine("","JMP",Dlabel);
+   code.EmitFormattedLine(Elabel,"EQU","*");
+// ENDCODEGENERATION
+
+   ExitModule("DOWHILEStatement");
+}
 //-----------------------------------------------------------
 void ParseVariable(TOKEN tokens[],bool asLValue,DATATYPE &datatype)
 //-----------------------------------------------------------
@@ -1670,7 +1900,17 @@ void GetNextToken(TOKEN tokens[])
             lexeme[0] = nextCharacter; lexeme[1] = '\0';
             reader.GetNextCharacter();
             break;
-         case '<': 
+         case '{':
+            type = OBRACKET;
+            lexeme[0] = nextCharacter; lexeme[1] = '\0';
+            reader.GetNextCharacter();
+            break;
+		 case '}': 
+            type = CBRACKET;
+            lexeme[0] = nextCharacter; lexeme[1] = '\0';
+            reader.GetNextCharacter();
+            break;
+		 case '<': 
             lexeme[0] = nextCharacter;
             nextCharacter = reader.GetNextCharacter().character;
             if ( nextCharacter == '=' )

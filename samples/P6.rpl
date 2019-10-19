@@ -1,0 +1,37 @@
+/*-------------------------------------------------------------*/
+// Richard Ogin
+// Problem #6
+// P6.rpl
+/*-------------------------------------------------------------*/
+
+PROGRAM
+   int x;
+   int y;
+
+   do {
+      INPUT "x? " x;
+      
+      if (x < 0) {
+        PRINT "x is negative", ENDL;
+      } elif (x < 10) {
+        PRINT "x < 10", ENDL;
+      } elif (x < 100) {
+        PRINT "10 <= x < 100", ENDL;
+      } else {
+        PRINT "x >= 100", ENDL;
+      }
+      
+      INPUT "y? " y;
+      
+      if (x < y) {
+        PRINT x, " < ", y, ENDL;
+      } elif (x = y) {
+        PRINT x, " = ", y, ENDL;
+  	  } else {
+        PRINT x, " > ", y, ENDL;
+  	  }
+   }
+   while ( x <> 0 );
+   
+   PRINT "ending program", ENDL;
+END
