@@ -1,6 +1,5 @@
 //-----------------------------------------------------------
 // Richard Ogin
-// RPL5 Compiler
 // 
 // RPLCompiler.cpp
 //-----------------------------------------------------------
@@ -21,7 +20,7 @@ using namespace std;
 #define TRACEIDENTIFIERTABLE
 #define TRACECOMPILER
 
-#include "..\RPL.h"
+#include ".\RPL.h"
 
 //-----------------------------------------------------------
 typedef enum
@@ -60,6 +59,13 @@ typedef enum
    FROM,
    TO,
    BY,
+   PROCEDURE,
+   CALL,
+   RETURN,
+   IN,
+   OUT,
+   IO,
+   REF,
 // punctuation
    COMMA,
    SEMICOLON,
@@ -130,6 +136,13 @@ const TOKENTABLERECORD TOKENTABLE[] =
    { FROM        ,"from"        ,true  },
    { TO          ,"to"          ,true  },
    { BY          ,"by"          ,true  },
+   { PROCEDURE   ,"proc"        ,true  },
+   { CALL        ,"call"        ,true  },
+   { RETURN      ,"return"      ,true  },
+   { IN          ,"IN"          ,true  },
+   { OUT         ,"OUT"         ,true  },
+   { IO          ,"IO"          ,true  },
+   { REF         ,"REF"         ,true  },
    { COMMA       ,"COMMA"       ,false },
    { SEMICOLON   ,"SEMICOLON"   ,false },
    { OPARENTHESIS,"OPARENTHESIS",false },
@@ -276,10 +289,16 @@ int main()
 void ParseRPLProgram(TOKEN tokens[])
 //-----------------------------------------------------------
 {
-   void GetNextToken(TOKEN tokens[]);
+   void ParseDataDefinitions(TOKEN tokens[],IDENTIFIERSCOPE identifierScope);
+   void ParsePROCEDUREDefinition(TOKEN tokens[]);
    void ParsePROGRAMDefinition(TOKEN tokens[]);
+   void GetNextToken(TOKEN tokens[]);
 
    EnterModule("RPLProgram");
+   
+   while ( tokens[0].type == PROCEDURE ) {
+      ParsePROCEDUREDefinition(tokens);
+   }
 
    if ( tokens[0].type == PROGRAM ) {
       ParsePROGRAMDefinition(tokens);
@@ -383,6 +402,8 @@ void ParseDataDefinitions(TOKEN tokens[],IDENTIFIERSCOPE identifierScope)
     
     //only used for CONST
     char literal[MAXIMUMLENGTHIDENTIFIER+1];
+	char operand[MAXIMUMLENGTHIDENTIFIER+1];
+    char comment[MAXIMUMLENGTHIDENTIFIER+1];
     
    	switch ( tokens[0].type )
    	{
@@ -446,6 +467,15 @@ void ParseDataDefinitions(TOKEN tokens[],IDENTIFIERSCOPE identifierScope)
 // ENDCODEGENERATION
                      identifierTable.AddToTable(identifier,PROGRAMMODULE_CONSTANT,datatype,reference);
                      break;
+                  case SUBPROGRAMMODULESCOPE:
+                     sprintf(reference,"FB:0D%d",code.GetFBOffset());
+                     strcpy(operand,"#"); strcat(operand,literal);
+                     sprintf(comment,"initialize constant %s",identifier);
+                     code.AddInstructionToInitializeFrameData("PUSH",operand,comment);
+                     code.AddInstructionToInitializeFrameData("POP",reference);
+                     code.IncrementFBOffset(1);
+                     identifierTable.AddToTable(identifier,SUBPROGRAMMODULE_VARIABLE,datatype,reference);
+                     break;
                }
       
             if ( tokens[0].type != SEMICOLON ) {
@@ -481,6 +511,11 @@ void ParseDataDefinitions(TOKEN tokens[],IDENTIFIERSCOPE identifierScope)
                      code.AddRWToStaticData(1,identifier,reference);
 // ENDCODEGENERATION
                      identifierTable.AddToTable(identifier,PROGRAMMODULE_VARIABLE,datatype,reference);
+                     break;
+                  case SUBPROGRAMMODULESCOPE:
+                     sprintf(reference,"FB:0D%d",code.GetFBOffset());
+                     code.IncrementFBOffset(1);
+                     identifierTable.AddToTable(identifier,SUBPROGRAMMODULE_VARIABLE,datatype,reference);
                      break;
                }
    		   
@@ -518,6 +553,11 @@ void ParseDataDefinitions(TOKEN tokens[],IDENTIFIERSCOPE identifierScope)
 // ENDCODEGENERATION
                      identifierTable.AddToTable(identifier,PROGRAMMODULE_VARIABLE,datatype,reference);
                      break;
+                  case SUBPROGRAMMODULESCOPE:
+                     sprintf(reference,"FB:0D%d",code.GetFBOffset());
+                     code.IncrementFBOffset(1);
+                     identifierTable.AddToTable(identifier,SUBPROGRAMMODULE_VARIABLE,datatype,reference);
+                     break;
                }
    		   
    		   if ( tokens[0].type != SEMICOLON ) {
@@ -543,6 +583,8 @@ void ParseStatement(TOKEN tokens[])
    void ParseIFStatement(TOKEN tokens[]);
    void ParseDOWHILEStatement(TOKEN tokens[]);
    void ParseFORStatement(TOKEN tokens[]);
+   void ParseCALLStatement(TOKEN tokens[]);
+   void ParseRETURNStatement(TOKEN tokens[]);
    void GetNextToken(TOKEN tokens[]);
 
    EnterModule("Statement");
@@ -570,6 +612,12 @@ void ParseStatement(TOKEN tokens[])
       case FOR:
 	     ParseFORStatement(tokens);
 		 break;
+      case CALL:
+         ParseCALLStatement(tokens);
+         break;
+      case RETURN:
+         ParseRETURNStatement(tokens);
+         break;
 	  default:
          ProcessCompilerError(tokens[0].sourceLineNumber,tokens[0].sourceLineIndex,
                               "Expecting beginning-of-statement");
@@ -1137,6 +1185,11 @@ Syntax "locations"                 l- or r-value
 <prefix>                           l-value
 <INPUTStatement>                   l-value
 LHS of <assignmentStatement>       l-value
+<FORStatement>                     l-value
+OUT <formalParameter>              l-value
+IO <formalParameter>               l-value
+REF <formalParameter>              l-value
+
 
 r-value ( read-only): value is pushed on run-time stack
 l-value (read/write): address of value is pushed on run-time stack
@@ -1160,13 +1213,21 @@ l-value (read/write): address of value is pushed on run-time stack
    identifierType = identifierTable.GetType(index);
    datatype = identifierTable.GetDatatype(index);
 
-   if ( !((identifierType ==        GLOBAL_VARIABLE) ||
-          (identifierType ==        GLOBAL_CONSTANT) ||
-          (identifierType == PROGRAMMODULE_VARIABLE) ||
-          (identifierType == PROGRAMMODULE_CONSTANT)) )
+   if ( !((identifierType ==           GLOBAL_VARIABLE) ||
+          (identifierType ==           GLOBAL_CONSTANT) ||
+          (identifierType ==    PROGRAMMODULE_VARIABLE) ||
+          (identifierType ==    PROGRAMMODULE_CONSTANT) ||
+		  (identifierType == SUBPROGRAMMODULE_VARIABLE) ||
+          (identifierType == SUBPROGRAMMODULE_CONSTANT) ||
+          (identifierType ==              IN_PARAMETER) ||
+          (identifierType ==             OUT_PARAMETER) ||
+          (identifierType ==              IO_PARAMETER) ||
+          (identifierType ==             REF_PARAMETER)) )
       ProcessCompilerError(tokens[0].sourceLineNumber,tokens[0].sourceLineIndex,"Expecting variable or constant identifier");
       
-   if ( asLValue && ((identifierType == GLOBAL_CONSTANT) || (identifierType == PROGRAMMODULE_CONSTANT)) )
+   if ( asLValue &&  ((identifierType == GLOBAL_CONSTANT) ||
+               (identifierType == PROGRAMMODULE_CONSTANT) ||
+            (identifierType == SUBPROGRAMMODULE_CONSTANT)) )
       ProcessCompilerError(tokens[0].sourceLineNumber,tokens[0].sourceLineIndex,"Constant may not be l-value");
 // ENDSTATICSEMANTICS
 
@@ -1764,7 +1825,363 @@ void ParsePrimary(TOKEN tokens[],DATATYPE &datatype)
 
    ExitModule("Primary");
 }
+//-----------------------------------------------------------
+void ParsePROCEDUREDefinition(TOKEN tokens[])
+//-----------------------------------------------------------
+{
+   void ParseFormalParameter(TOKEN tokens[],IDENTIFIERTYPE &identifierType,int &n);
+   void ParseDataDefinitions(TOKEN tokens[],IDENTIFIERSCOPE identifierScope);
+   void ParseStatement(TOKEN tokens[]);
+   void GetNextToken(TOKEN tokens[]);
 
+   bool isInTable;
+   char line[SOURCELINELENGTH+1];
+   int index;
+   char reference[SOURCELINELENGTH+1];
+
+// n = # formal parameters, m = # words of "save-register" space and locally-defined variables/constants
+   int n,m;
+   char label[SOURCELINELENGTH+1],operand[SOURCELINELENGTH+1],comment[SOURCELINELENGTH+1];
+
+   EnterModule("PROCEDUREDefinition");
+
+   GetNextToken(tokens);
+
+   if ( tokens[0].type != IDENTIFIER )
+      ProcessCompilerError(tokens[0].sourceLineNumber,tokens[0].sourceLineIndex,"Expecting identifier");
+
+   index = identifierTable.GetIndex(tokens[0].lexeme,isInTable);
+   if ( isInTable && identifierTable.IsInCurrentScope(index) )
+      ProcessCompilerError(tokens[0].sourceLineNumber,tokens[0].sourceLineIndex,"Multiply-defined identifier");
+
+   identifierTable.AddToTable(tokens[0].lexeme,PROCEDURE_SUBPROGRAMMODULE,NOTYPE,tokens[0].lexeme);
+
+// CODEGENERATION
+   code.EnterModuleBody(PROCEDURE_SUBPROGRAMMODULE,index);
+   code.ResetFrameData();
+   code.EmitUnformattedLine("; **** =========");
+   sprintf(line,"; **** PROCEDURE module (%4d)",tokens[0].sourceLineNumber);
+   code.EmitUnformattedLine(line);
+   code.EmitUnformattedLine("; **** =========");
+   code.EmitFormattedLine(tokens[0].lexeme,"EQU","*");
+// ENDCODEGENERATION
+
+   identifierTable.EnterNestedStaticScope();
+
+   GetNextToken(tokens);
+   n = 0;
+   if ( tokens[0].type == OPARENTHESIS )
+   {
+      do
+      {
+         IDENTIFIERTYPE identifierType;
+
+         GetNextToken(tokens);
+         ParseFormalParameter(tokens,identifierType,n);
+      } while ( tokens[0].type == COMMA );
+
+      if ( tokens[0].type != CPARENTHESIS )
+         ProcessCompilerError(tokens[0].sourceLineNumber,tokens[0].sourceLineIndex,"Expecting ')'");
+      GetNextToken(tokens);
+   }
+
+// CODEGENERATION
+   code.IncrementFBOffset(2); // makes room in frame for caller's saved FB register and the CALL return address
+// ENDCODEGENERATION
+
+   if ( tokens[0].type != OBRACKET )
+         ProcessCompilerError(tokens[0].sourceLineNumber,tokens[0].sourceLineIndex,"Expecting '{'");
+   GetNextToken(tokens);
+   
+   ParseDataDefinitions(tokens,SUBPROGRAMMODULESCOPE);
+
+// CODEGENERATION
+   m = code.GetFBOffset()-(n+2);
+   code.EmitFormattedLine("","PUSHSP","","set PROCEDURE module FB = SP-on-entry + 2(n+2)");
+   sprintf(operand,"#0D%d",2*(n+2));
+   sprintf(comment,"n = %d",n);
+   code.EmitFormattedLine("","PUSH",operand,comment);
+   code.EmitFormattedLine("","ADDI");
+   code.EmitFormattedLine("","POPFB");
+   code.EmitFormattedLine("","PUSHSP","","PROCEDURE module SP = SP-on-entry + 2m");
+   sprintf(operand,"#0D%d",2*m);
+   sprintf(comment,"m = %d",m);
+   code.EmitFormattedLine("","PUSH",operand,comment);
+   code.EmitFormattedLine("","SUBI");
+   code.EmitFormattedLine("","POPSP");
+   code.EmitUnformattedLine("; statements to initialize frame data (if necessary)");
+   code.EmitFrameData();
+   sprintf(label,"MODULEBODY%04d",code.LabelSuffix());
+   code.EmitFormattedLine("","CALL",label);
+   code.EmitFormattedLine("","PUSHFB","","restore caller's SP-on-entry = FB - 2(n+2)");
+   sprintf(operand,"#0D%d",2*(n+2));
+   code.EmitFormattedLine("","PUSH",operand);
+   code.EmitFormattedLine("","SUBI");
+   code.EmitFormattedLine("","POPSP");
+   code.EmitFormattedLine("","RETURN","","return to caller");
+   code.EmitUnformattedLine("");
+   code.EmitFormattedLine(label,"EQU","*");
+   code.EmitUnformattedLine("; statements in body of PROCEDURE module (may include RETURN)");
+// ENDCODEGENERATION
+
+   while ( tokens[0].type != CBRACKET )
+      ParseStatement(tokens);
+
+// CODEGENERATION
+   code.EmitFormattedLine("","RETURN");
+   code.EmitUnformattedLine("");
+   code.EmitUnformattedLine("; **** =========");
+   sprintf(line,"; **** END (%4d)",tokens[0].sourceLineNumber);
+   code.EmitUnformattedLine(line);
+   code.EmitUnformattedLine("; **** =========");
+   code.ExitModuleBody();
+// ENDCODEGENERATION
+
+   identifierTable.ExitNestedStaticScope();
+
+#ifdef TRACECOMPILER
+   identifierTable.DisplayTableContents("Contents of identifier table at end of compilation of PROCEDURE module definition");
+#endif
+
+   GetNextToken(tokens);
+
+   ExitModule("PROCEDUREDefinition");
+}
+//-----------------------------------------------------------
+void ParseFormalParameter(TOKEN tokens[],IDENTIFIERTYPE &identifierType,int &n)
+//-----------------------------------------------------------
+{
+   void GetNextToken(TOKEN tokens[]);
+
+   char identifier[MAXIMUMLENGTHIDENTIFIER+1],reference[MAXIMUMLENGTHIDENTIFIER+1];
+   bool isInTable;
+   int index;
+   DATATYPE datatype;
+
+   EnterModule("FormalParameter");
+
+// CODEGENERATION
+   switch ( tokens[0].type )
+   {
+      case IN:
+         identifierType = IN_PARAMETER;
+         sprintf(reference,"FB:0D%d",code.GetFBOffset());
+         code.IncrementFBOffset(1);
+         n += 1;
+         GetNextToken(tokens);
+         break;
+      case OUT:
+         identifierType = OUT_PARAMETER;
+         code.IncrementFBOffset(1);
+         sprintf(reference,"FB:0D%d",code.GetFBOffset());
+         code.IncrementFBOffset(1);
+         n += 2;
+         GetNextToken(tokens);
+         break;
+      case IO:
+         identifierType = IO_PARAMETER;
+         code.IncrementFBOffset(1);
+         sprintf(reference,"FB:0D%d",code.GetFBOffset());
+         code.IncrementFBOffset(1);
+         n += 2;
+         GetNextToken(tokens);
+         break;
+      case REF:
+         identifierType = REF_PARAMETER;
+         sprintf(reference,"@FB:0D%d",code.GetFBOffset());
+         code.IncrementFBOffset(1);
+         n += 1;
+         GetNextToken(tokens);
+         break;
+      default:
+         identifierType = IN_PARAMETER;
+         sprintf(reference,"FB:0D%d",code.GetFBOffset());
+         code.IncrementFBOffset(1);
+         n += 1;
+         break;
+   }
+// ENDCODEGENERATION
+
+   switch ( tokens[0].type )
+   {
+      case INT:
+         datatype = INTEGERTYPE;
+         break;
+      case BOOL:
+         datatype = BOOLEANTYPE;
+         break;
+      default:
+         ProcessCompilerError(tokens[0].sourceLineNumber,tokens[0].sourceLineIndex,"Expecting INT or BOOL");
+   }
+   GetNextToken(tokens);
+   
+   if ( tokens[0].type != IDENTIFIER )
+      ProcessCompilerError(tokens[0].sourceLineNumber,tokens[0].sourceLineIndex,"Expecting identifier");
+   strcpy(identifier,tokens[0].lexeme);
+   GetNextToken(tokens);
+
+   index = identifierTable.GetIndex(identifier,isInTable);
+   if ( isInTable && identifierTable.IsInCurrentScope(index) )
+      ProcessCompilerError(tokens[0].sourceLineNumber,tokens[0].sourceLineIndex,"Multiply-defined identifier");
+
+   identifierTable.AddToTable(identifier,identifierType,datatype,reference);
+
+   ExitModule("FormalParameter");
+}
+//-----------------------------------------------------------
+void ParseCALLStatement(TOKEN tokens[])
+//-----------------------------------------------------------
+{
+   void GetNextToken(TOKEN tokens[]);
+   void ParseVariable(TOKEN tokens[],bool asLValue,DATATYPE &datatype);
+   void ParseExpression(TOKEN tokens[],DATATYPE &datatype);
+
+   char line[SOURCELINELENGTH+1];
+   bool isInTable;
+   int index,parameters;
+
+   EnterModule("CALLStatement");
+
+   sprintf(line,"; **** CALL statement (%4d)",tokens[0].sourceLineNumber);
+   code.EmitUnformattedLine(line);
+
+   GetNextToken(tokens);
+
+   if ( tokens[0].type != IDENTIFIER )
+      ProcessCompilerError(tokens[0].sourceLineNumber,tokens[0].sourceLineIndex,"Expecting identifier");
+
+// STATICSEMANTICS
+   index = identifierTable.GetIndex(tokens[0].lexeme,isInTable);
+   if ( !isInTable )
+      ProcessCompilerError(tokens[0].sourceLineNumber,tokens[0].sourceLineIndex,"Undefined identifier");
+   if ( identifierTable.GetType(index) != PROCEDURE_SUBPROGRAMMODULE )
+      ProcessCompilerError(tokens[0].sourceLineNumber,tokens[0].sourceLineIndex,"Expecting PROCEDURE identifier");
+// ENDSTATICSEMANTICS
+
+   GetNextToken(tokens);
+   parameters = 0;
+   if ( tokens[0].type == OPARENTHESIS )
+   {
+      DATATYPE expressionDatatype,variableDatatype;
+
+      do
+      {
+         GetNextToken(tokens);
+         parameters++;
+
+// CODEGENERATION   
+// STATICSEMANTICS
+         switch ( identifierTable.GetType(index+parameters) )
+         {
+            case IN_PARAMETER:
+               ParseExpression(tokens,expressionDatatype);
+               if ( expressionDatatype != identifierTable.GetDatatype(index+parameters) )
+                  ProcessCompilerError(tokens[0].sourceLineNumber,tokens[0].sourceLineIndex,
+                     "Actual parameter data type does not match formal parameter data type");
+               break;
+            case OUT_PARAMETER:
+               ParseVariable(tokens,true,variableDatatype);
+               if ( variableDatatype != identifierTable.GetDatatype(index+parameters) )
+                  ProcessCompilerError(tokens[0].sourceLineNumber,tokens[0].sourceLineIndex,
+                     "Actual parameter data type does not match formal parameter data type");
+               code.EmitFormattedLine("","PUSH","#0X0000");
+               break;
+            case IO_PARAMETER:
+               ParseVariable(tokens,true,variableDatatype);
+               if ( variableDatatype != identifierTable.GetDatatype(index+parameters) )
+                  ProcessCompilerError(tokens[0].sourceLineNumber,tokens[0].sourceLineIndex,
+                     "Actual parameter data type does not match formal parameter data type");
+               code.EmitFormattedLine("","PUSH","@SP:0D0");
+               break;
+            case REF_PARAMETER:
+               ParseVariable(tokens,true,variableDatatype);
+               if ( variableDatatype != identifierTable.GetDatatype(index+parameters) )
+                  ProcessCompilerError(tokens[0].sourceLineNumber,tokens[0].sourceLineIndex,
+                     "Actual parameter data type does not match formal parameter data type");
+               break;
+         }
+// ENDSTATICSEMANTICS
+// ENDCODEGENERATION
+      } while ( tokens[0].type == COMMA );
+
+      if ( tokens[0].type != CPARENTHESIS )
+         ProcessCompilerError(tokens[0].sourceLineNumber,tokens[0].sourceLineIndex,"Expecting )");
+
+      GetNextToken(tokens);
+   }
+                     
+// STATICSEMANTICS
+   if ( identifierTable.GetCountOfFormalParameters(index) != parameters )
+      ProcessCompilerError(tokens[0].sourceLineNumber,tokens[0].sourceLineIndex,
+         "Number of actual parameters does not match number of formal parameters");
+// ENDSTATICSEMANTICS
+
+// CODEGENERATION
+   code.EmitFormattedLine("","PUSHFB");
+   code.EmitFormattedLine("","CALL",identifierTable.GetReference(index));
+   code.EmitFormattedLine("","POPFB");
+   for (parameters = identifierTable.GetCountOfFormalParameters(index); parameters >= 1; parameters--)
+   {
+      switch ( identifierTable.GetType(index+parameters) )
+      {
+         case IN_PARAMETER:
+            code.EmitFormattedLine("","DISCARD","#0D1");
+            break;
+         case OUT_PARAMETER:
+            code.EmitFormattedLine("","POP","@SP:0D1");
+            code.EmitFormattedLine("","DISCARD","#0D1");
+            break;
+         case IO_PARAMETER:
+            code.EmitFormattedLine("","POP","@SP:0D1");
+            code.EmitFormattedLine("","DISCARD","#0D1");
+            break;
+         case REF_PARAMETER:
+            code.EmitFormattedLine("","DISCARD","#0D1");
+            break;
+      }
+   }
+// ENDCODEGENERATION
+
+   if ( tokens[0].type != SEMICOLON )
+      ProcessCompilerError(tokens[0].sourceLineNumber,tokens[0].sourceLineIndex,"Expecting ';'");
+
+   GetNextToken(tokens);
+
+   ExitModule("CALLStatement");
+}
+
+//-----------------------------------------------------------
+void ParseRETURNStatement(TOKEN tokens[])
+//-----------------------------------------------------------
+{
+   void GetNextToken(TOKEN tokens[]);
+
+   char line[SOURCELINELENGTH+1];
+
+   EnterModule("RETURNStatement");
+
+   sprintf(line,"; **** RETURN statement (%4d)",tokens[0].sourceLineNumber);
+   code.EmitUnformattedLine(line);
+
+   GetNextToken(tokens);
+
+// STATICSEMANTICS
+   if ( !code.IsInModuleBody(PROCEDURE_SUBPROGRAMMODULE) )
+      ProcessCompilerError(tokens[0].sourceLineNumber,tokens[0].sourceLineIndex,
+         "RETURN without expression only allowed in PROCEDURE module body");
+// ENDSTATICSEMANTICS
+
+// CODEGENERATION
+   code.EmitFormattedLine("","RETURN");
+// ENDCODEGENERATION
+
+   if ( tokens[0].type != SEMICOLON )
+      ProcessCompilerError(tokens[0].sourceLineNumber,tokens[0].sourceLineIndex,"Expecting ';'");
+
+   GetNextToken(tokens);
+
+   ExitModule("RETURNStatement");
+}
 //-----------------------------------------------------------
 
 void Callback1(int sourceLineNumber,const char sourceLine[])

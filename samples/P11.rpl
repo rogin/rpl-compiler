@@ -1,0 +1,120 @@
+/*------------------------------------------------------------*/
+// Richard Ogin
+// Problem #11
+// P11.rpl
+/*------------------------------------------------------------*/
+
+//VAR x: INT,y: INT.
+//VAR z: BOOL.
+
+proc PIN0 {
+   PRINT "PIN0()", ENDL;
+   return;
+}
+
+proc PIN1(int x) {
+   PRINT "PIN1(",x,")", ENDL;
+//   return;
+}
+
+proc PIN2(int x, IN int y) {
+   PRINT "PIN2(",x,",",y,")", ENDL;
+}
+
+proc POUT1(OUT boolean b) {
+   PRINT "POUT1", ENDL;
+   b = true;
+}
+
+proc POUT2(OUT int x, OUT int y) {
+   PRINT "POUT2", ENDL;
+   x = 2;
+   y = 2*x;
+   return;
+}
+
+proc PIN1R(int x) {
+   if ( x > 0 ) {
+      PRINT x, ENDL;
+      call PIN1R(x-1);
+   }
+}
+
+proc PIN1OUT1(IN int x, OUT int y) {
+   PRINT "PIN1OUT1",ENDL;
+   y = x;
+}
+
+proc PIN1OUT1R(int x, OUT int y) {
+   if ( x = 0 ) {
+      y = 42;
+   } else {
+      call PIN1OUT1R(x-1,y);
+   }
+}
+
+proc PIO1(IO int x) {
+   PRINT "PIO1", ENDL;
+   x = x+2;
+}
+
+proc PIO2(IO int x1, IO int x2) {
+   int T;
+
+   PRINT "PIO2", ENDL;
+   T = x1;
+   x1 = x2;
+   x2 = T;
+}
+
+proc PREF2(REF int i, REF boolean x) {
+   PRINT "PREF2 (i,x) = (",i,",",x,")", ENDL;
+   x = NOT x;
+   return;
+}
+
+PROGRAM
+   int i;
+   int x;
+   int y;
+   boolean z;
+
+   call PIN0;
+
+   call PIN1(1);
+
+   x = 2;
+   call PIN2(x,x+2);
+
+   call POUT1(z);
+   PRINT "z = ", z, ENDL;
+
+   call POUT2(x,y);
+   PRINT "x = ", x, ", y = ", y, ENDL;
+
+   PRINT "PIN1R(3)", ENDL;
+   call PIN1R(3);
+
+   x = 1;
+   call PIN1OUT1(x,y);
+   PRINT "y = ", y, ENDL;
+
+   PRINT "PIN1OUT1R",ENDL;
+   call PIN1OUT1R(3,y);
+   PRINT "y = ",y,ENDL;
+
+   y = 7;
+   call PIO1(y);
+   PRINT "y = ", y, ENDL;
+
+   x = 3;
+   y = 7;
+   PRINT "(x,y) = (",x,",",y,")", ENDL;
+   call PIO2(x,y);
+   PRINT "(x,y) = (",x,",",y,")", ENDL;
+
+   for i from 1 to 2 {
+      call PREF2(i,z);
+   }
+
+END

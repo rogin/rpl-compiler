@@ -1,0 +1,31 @@
+/*------------------------------------------------------------*/
+// Richard Ogin
+// Problem #10
+// P10.rpl
+/*------------------------------------------------------------*/
+
+proc P(IN int in1, OUT int out1, IO int io1, REF boolean ref1) {
+   const int C1 = 101;
+   
+   out1 = in1 + C1;
+   io1 = io1 + 1;
+   ref1 = NOT ref1;
+}
+
+PROGRAM
+   const int P1 = 1;
+
+   int P2;
+   int P3;
+   boolean P4;
+
+   P3 = 3;
+   P4 = true;
+   
+   call P(P1,P2,P3,P4);
+   
+   PRINT "P1 = ", P1, ENDL;
+   PRINT "P2 = ", P2, ENDL;
+   PRINT "P3 = ", P3, ENDL;
+   PRINT "P4 = ", P4, ENDL;
+END
