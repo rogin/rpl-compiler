@@ -1,0 +1,78 @@
+/*------------------------------------------------------------*/
+// Richard Ogin
+// Problem #12
+// P12.rpl
+/*------------------------------------------------------------*/
+
+func int F0() {
+   return ( 1-1 );
+}
+
+func int F1(IN int x) {
+   int y;
+
+   y = x + 1;
+   return ( y );
+}
+
+func int F2(IN int x) {
+   int y;
+
+   return ( F0() + F1(x) );
+}
+
+func int F3(int x) {          // F3() is *recursive*
+   if ( x = 0 ) {
+      return ( 1 );
+   } else {
+      return ( 1 + F3(x-1) );
+   }
+}
+
+func int F4(int x1, int x2, int x3) {
+   return ( x1 * x2 * x3 );
+}
+
+func int F5(IN int x, IN int y) {
+   return ( F3(x) + F2(y) );
+}
+
+proc P1(IN int x1, OUT int x2, IO int x3, REF int x4) {
+   PRINT "P1",ENDL;
+   x2 = F3(x1);   PRINT "x2=",x2,ENDL;
+   x3 = x3+x2+x4; PRINT "x3=",x3,ENDL;
+   x4 = x3;       PRINT "x4=",x4,ENDL;
+}
+
+PROGRAM
+   int x;
+   int y;
+   int i;
+   int x1;
+   int x2;
+   int x3;
+   int x4;
+   
+   do {
+      INPUT "x? " x;
+      INPUT "y? " y;
+      
+      PRINT "F0        = ",F0(),ENDL;
+      for i from 1 to x {
+         PRINT "F1(",i,")     = ",F1(i),ENDL;
+      }
+      PRINT "F2(2)     = ",F2(2),ENDL;
+      PRINT "F3(3)     = ",F3(3),ENDL;
+      PRINT "F4(4,5,6) = ",F4(4,5,6),ENDL;
+      PRINT "F5(x,y)   = ",F5(x,y),ENDL;
+   } while ( x <> 0 );
+   
+   x1 = 1;
+   x2 = 2;
+   x3 = 3;
+   x4 = 4;
+   
+   call P1(x1,x2,x3,x4);
+   PRINT "x1,x2,x3,x4=",x1,",",x2,",",x3,",",x4,ENDL;
+   
+END
